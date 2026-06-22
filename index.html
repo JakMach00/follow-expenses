@@ -3,9 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<meta name="theme-color" content="#15211C">
+<meta name="theme-color" content="#15211C" id="themeColorMeta">
 <link rel="manifest" href="./manifest.json">
 <title>Wydatki - domowa księga</title>
+<!-- Ustaw motyw natychmiast, jeszcze przed CSS, żeby uniknąć mignięcia ciemny->jasny -->
+<script>
+  (function(){
+    try{
+      var t = localStorage.getItem('wydatki-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+  })();
+</script>
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -19,7 +28,7 @@
       <button id="authTabSignUp">Nowe konto</button>
     </div>
     <div class="auth-error" id="authError"></div>
-    <div class="auth-field"><label>E-mail</label><input type="email" id="authEmail" autocomplete="username" placeholder="ty@example.com"></div>
+    <div class="auth-field"><label>E-mail</label><input type="email" id="authEmail" autocomplete="username" placeholder="example@gmail.com"></div>
     <div class="auth-field"><label>Hasło</label><input type="password" id="authPassword" autocomplete="current-password" placeholder="min. 6 znaków"></div>
     <button class="auth-submit" id="authSubmitBtn">Zaloguj się</button>
     <button class="auth-forgot" id="authForgotBtn">Nie pamiętam hasła</button>
@@ -45,6 +54,7 @@
     <button data-view="add"><span class="ic">➕</span>Dodaj</button>
     <button data-view="month"><span class="ic">🧾</span>Miesiąc</button>
     <button data-view="year"><span class="ic">📊</span>Rok</button>
+    <button data-view="shared"><span class="ic">🤝</span>Wspólne</button>
     <button data-view="settings"><span class="ic">⚙️</span>Ustawienia</button>
   </nav>
 </div>

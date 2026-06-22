@@ -1,7 +1,7 @@
 {
   "name": "Wydatki",
   "short_name": "Wydatki",
-  "description": "Domowa księga wydatków - offline, z synchronizacją",
+  "description": "Księga wydatków - offline, z synchronizacją",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

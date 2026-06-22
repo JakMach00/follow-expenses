@@ -1,0 +1,71 @@
+rules_version = '2';
+
+// =====================================================================
+//  Reguły bezpieczeństwa dla aplikacji "Wydatki".
+//
+//  Zasada główna: każdy użytkownik widzi i zapisuje WYŁĄCZNIE własne dane
+//  spod users/{uid}/... . Bez tych reguł ktokolwiek znający projectId
+//  (a jest on widoczny w kodzie front-endu) mógłby czytać i nadpisywać
+//  cudze wpisy.
+//
+//  Wgrywanie:
+//    Firebase Console -> Firestore Database -> zakładka "Rules"
+//    -> wklej całość -> "Publish".
+//  Albo przez CLI:  firebase deploy --only firestore:rules
+// =====================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Wszystko, co należy do users/{uid}, jest dostępne tylko dla
+    // zalogowanego właściciela tego uid.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      // Wydatki: amount musi być dodatnią liczbą, date stringiem RRRR-MM-DD.
+      match /expenses/{docId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validExpense();
+      }
+
+      // Przychody: analogiczna walidacja.
+      match /income/{docId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validIncome();
+      }
+
+      // Płatności cykliczne i ustawienia - tylko własność, bez twardej
+      // walidacji kształtu (struktura bywa rozszerzana).
+      match /recurring/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /meta/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Cokolwiek innego pod uid - również tylko właściciel.
+      match /{document=**} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+  }
+
+  function isOwner(uid) {
+    return request.auth != null && request.auth.uid == uid;
+  }
+
+  function validExpense() {
+    let d = request.resource.data;
+    return d.amount is number && d.amount > 0
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.catId is string
+        && d.sub is string;
+  }
+
+  function validIncome() {
+    let d = request.resource.data;
+    return d.amount is number && d.amount > 0
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.srcId is string;
+  }
+}
