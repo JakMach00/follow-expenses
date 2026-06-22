@@ -130,6 +130,50 @@ function evalAmountExpr(str){
   for(const tok of m){ const v = parseFloat(tok); if(isNaN(v)) return NaN; total += v; }
   return total;
 }
+/* Max kwota: 10 000 000, max 2 miejsca po przecinku. */
+const MAX_AMOUNT = 10000000;
+const MAX_INT_DIGITS = 8; // 10 000 000 ma 8 cyfr
+
+/* Czyści i ogranicza wpisaną kwotę/wyrażenie:
+   - tylko cyfry, przecinek oraz + / - (kropka zamieniana na przecinek)
+   - max 2 cyfry po przecinku w każdym segmencie
+   - każdy segment <= MAX_AMOUNT (max 8 cyfr części całkowitej)
+   - brak podwójnych operatorów */
+function sanitizeAmount(raw){
+  let s = String(raw).replace(/\./g, ',').replace(/[^0-9,+\-]/g, '');
+  s = s.replace(/([+\-]){2,}/g, '$1');
+  const parts = s.split(/([+\-])/);
+  let out = '';
+  for(let i=0;i<parts.length;i++){
+    let p = parts[i];
+    if(p==='+'||p==='-'){ out+=p; continue; }
+    if(p==='') continue;
+    const ci = p.indexOf(',');
+    if(ci!==-1){
+      let intPart = p.slice(0,ci).replace(/,/g,'').slice(0,MAX_INT_DIGITS);
+      let dec = p.slice(ci+1).replace(/,/g,'').slice(0,2);
+      p = intPart + ',' + dec;
+    } else if(p.length>MAX_INT_DIGITS){
+      p = p.slice(0,MAX_INT_DIGITS);
+    }
+    const val = parseFloat(p.replace(',','.'));
+    if(!isNaN(val) && val>MAX_AMOUNT) p = '10000000';
+    out += p;
+  }
+  return out;
+}
+
+/* Dopasowuje rozmiar czcionki pola kwoty i przewija do końca,
+   żeby zawsze było widać ostatnio wpisane znaki (problem przy kalkulatorze). */
+function fitAmountField(el){
+  if(!el) return;
+  const len = el.value.length;
+  let size = 40;
+  if(len>8) size = Math.max(20, 40 - (len-8)*2.1);
+  el.style.fontSize = size+'px';
+  el.scrollLeft = el.scrollWidth;
+}
+
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 let toastTimer=null;
@@ -290,7 +334,7 @@ function renderAddExpense(seg){
       <button class="pill-btn ${isYest?'selected':''}" data-act="setdate" data-val="${ymd(yest)}">Wczoraj</button>
       <input class="date-input" id="dateInput" type="date" value="${state.selDate}">
     </div>
-    <input class="note-input" id="noteInput" type="text" placeholder="Notatka (opcjonalnie)" value="${escapeHtml(noteVal)}" maxlength="120">
+    <input class="note-input" id="noteInput" type="text" placeholder="Notatka (opcjonalnie)" value="${escapeHtml(noteVal)}" maxlength="120" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
     ${splitBlock}
     <button class="save-btn" id="saveBtn" ${canSave?'':'disabled'}>${state.editId ? 'Zapisz zmiany' : 'Zapisz wydatek'}</button>
     ${state.editId ? '<button class="cancel-edit" id="cancelEditBtn">Anuluj edycję</button>' : ''}
@@ -329,7 +373,7 @@ function renderAddIncome(seg){
       <button class="pill-btn ${isYest?'selected':''}" data-act="setdate" data-val="${ymd(yest)}">Wczoraj</button>
       <input class="date-input" id="dateInput" type="date" value="${state.selDate}">
     </div>
-    <input class="note-input" id="noteInput" type="text" placeholder="Notatka (np. pracodawca)" value="${escapeHtml(noteVal)}" maxlength="120">
+    <input class="note-input" id="noteInput" type="text" placeholder="Notatka (np. pracodawca)" value="${escapeHtml(noteVal)}" maxlength="120" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
     <button class="save-btn income" id="saveBtn" ${canSave?'':'disabled'}>${state.editId ? 'Zapisz zmiany' : 'Zapisz przychód'}</button>
     ${state.editId ? '<button class="cancel-edit" id="cancelEditBtn">Anuluj edycję</button>' : ''}
   </div>
@@ -338,15 +382,17 @@ function renderAddIncome(seg){
 }
 
 function renderNumpad(val){
-  const keys = ['7','8','9','4','5','6','1','2','3','+','0',','];
   const preview = evalAmountExpr(val);
   const showPreview = /[+\-]/.test(String(val)) && !isNaN(preview);
+  // Układ jak w prawdziwym kalkulatorze: cyfry po lewej, operatory i ⌫ w prawej kolumnie.
+  const k = (key, label, cls)=>`<button class="np-key ${cls||''}" data-act="np" data-k="${key}">${label}</button>`;
   return `<div class="numpad">
     ${showPreview ? `<div class="numpad-preview">= ${fmtMoney(preview)}</div>` : ''}
     <div class="numpad-grid">
-      ${keys.map(k=>`<button class="np-key ${k==='+'?'op':''}" data-act="np" data-k="${k}">${k}</button>`).join('')}
-      <button class="np-key wide" data-act="np" data-k="-">−</button>
-      <button class="np-key back" data-act="np" data-k="back">⌫</button>
+      ${k('7','7')}${k('8','8')}${k('9','9')}${k('back','⌫','back')}
+      ${k('4','4')}${k('5','5')}${k('6','6')}${k('+','+','op')}
+      ${k('1','1')}${k('2','2')}${k('3','3')}${k('-','−','op')}
+      ${k('0','0','zero')}${k(',',',','comma')}
     </div>
   </div>`;
 }
@@ -700,7 +746,7 @@ function renderSettings(){
   return `
   <div class="card">
     <h2>Wygląd</h2>
-    <div class="settings-row">
+    <div class="settings-row col">
       <div><div class="t">Motyw</div><div class="d">Ciemny jest domyślny. Wybór zapisuje się na tym urządzeniu.</div></div>
       <div class="seg theme-seg">
         <button class="${state.theme==='dark'?'active':''}" data-act="theme" data-val="dark">🌙 Ciemny</button>
@@ -842,9 +888,18 @@ function attachAdd(view){
   const noteEl = document.getElementById('noteInput');
   const dateEl = document.getElementById('dateInput');
 
-  if(amountEl && !state.numpadOpen){
-    amountEl.addEventListener('input', ()=>{ state._amountDraft = amountEl.value; updateSaveState(); });
-    amountEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ attemptSave(); } });
+  if(amountEl){
+    fitAmountField(amountEl);
+    if(!state.numpadOpen){
+      amountEl.addEventListener('input', ()=>{
+        const clean = sanitizeAmount(amountEl.value);
+        if(clean !== amountEl.value) amountEl.value = clean;
+        state._amountDraft = clean;
+        fitAmountField(amountEl);
+        updateSaveState();
+      });
+      amountEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ attemptSave(); } });
+    }
   }
   if(noteEl){
     noteEl.addEventListener('input', ()=>{ state._noteDraft = noteEl.value; });
@@ -1006,51 +1061,68 @@ function attachSettings(view){
 /* ============ NUMPAD ============ */
 function handleNumpad(k){
   let cur = state._amountDraft || '';
-  if(k==='back'){ cur = cur.slice(0,-1); }
-  else if(k===','){ if(!/[.,]\d*$/.test(cur)) cur += ','; }
-  else if(k==='+'||k==='-'){ if(cur && !/[+\-]$/.test(cur)) cur += k; }
-  else { cur += k; }
+  if(k==='back'){
+    cur = cur.slice(0,-1);
+  } else if(k===','){
+    const seg = cur.split(/[+\-]/).pop();
+    if(seg!=='' && seg.indexOf(',')===-1) cur += ',';
+  } else if(k==='+'||k==='-'){
+    if(cur && !/[+\-]$/.test(cur)) cur += k;
+  } else {
+    // cyfra: pilnuj max 2 miejsc po przecinku i limitu kwoty w segmencie
+    const seg = cur.split(/[+\-]/).pop();
+    const ci = seg.indexOf(',');
+    if(ci!==-1){
+      if(seg.length-ci-1 >= 2) return; // już 2 cyfry po przecinku
+    } else if(seg.replace(/^0+(?=\d)/,'').length >= MAX_INT_DIGITS){
+      return; // 8 cyfr części całkowitej = 10 000 000
+    }
+    const candidate = seg + k;
+    if(parseFloat(candidate.replace(',','.')) > MAX_AMOUNT) return;
+    cur += k;
+  }
+  cur = sanitizeAmount(cur);
   state._amountDraft = cur;
-  // update field + preview without losing numpad
   const inp=document.getElementById('amountInput');
-  if(inp) inp.value=cur;
+  if(inp){ inp.value=cur; fitAmountField(inp); }
   const np=document.querySelector('.numpad');
   if(np) np.outerHTML = renderNumpad(cur);
   updateSaveState();
 }
 
 /* ============ SWIPE ============ */
+/* Przesunięcie palcem w lewo poza próg od razu wywołuje pop-up potwierdzenia
+   (bez drugiego klikania osobnego przycisku). Wiersz zawsze wraca na miejsce. */
 function attachSwipe(){
+  const THRESHOLD = -64;
   document.querySelectorAll('.tx-swipe-content').forEach(el=>{
-    let startX=0, startY=0, dx=0, active=false, decided=false, horizontal=false;
+    let startX=0, startY=0, dx=0, active=false, decided=false, horizontal=false, fired=false;
+    const reset = ()=>{ el.style.transition='transform .18s'; el.style.transform='translateX(0)'; };
     el.addEventListener('touchstart', e=>{
       startX=e.touches[0].clientX; startY=e.touches[0].clientY;
-      dx=0; active=true; decided=false; horizontal=false;
+      dx=0; active=true; decided=false; horizontal=false; fired=false;
       el.style.transition='none';
     }, {passive:true});
     el.addEventListener('touchmove', e=>{
-      if(!active) return;
-      const cx=e.touches[0].clientX, cy=e.touches[0].clientY;
-      const ddx=cx-startX, ddy=cy-startY;
-      if(!decided){
-        if(Math.abs(ddx)>8 || Math.abs(ddy)>8){ decided=true; horizontal=Math.abs(ddx)>Math.abs(ddy); }
-      }
+      if(!active || fired) return;
+      const ddx=e.touches[0].clientX-startX, ddy=e.touches[0].clientY-startY;
+      if(!decided && (Math.abs(ddx)>8 || Math.abs(ddy)>8)){ decided=true; horizontal=Math.abs(ddx)>Math.abs(ddy); }
       if(!horizontal) return;
-      dx=ddx;
-      if(dx>0) dx=Math.min(dx, el.classList.contains('swiped')?88:0);
-      if(dx<-100) dx=-100;
-      const base = el.classList.contains('swiped') ? -88 : 0;
-      let tx = base + dx;
-      if(tx>0) tx=0; if(tx<-100) tx=-100;
-      el.style.transform='translateX('+tx+'px)';
+      dx = Math.max(-110, Math.min(0, ddx));
+      el.style.transform='translateX('+dx+'px)';
+      el.parentElement.classList.toggle('arming', dx < THRESHOLD);
+      if(dx < THRESHOLD){
+        // commit od razu po przekroczeniu progu
+        fired=true; active=false;
+        el.parentElement.classList.remove('arming');
+        reset();
+        confirmDelete(el.dataset.id, el.dataset.t);
+      }
     }, {passive:true});
     el.addEventListener('touchend', ()=>{
       if(!active) return; active=false;
-      el.style.transition='transform .18s';
-      const base = el.classList.contains('swiped') ? -88 : 0;
-      const final = base + dx;
-      if(final < -44){ el.style.transform='translateX(-88px)'; el.classList.add('swiped'); }
-      else { el.style.transform='translateX(0)'; el.classList.remove('swiped'); }
+      el.parentElement.classList.remove('arming');
+      reset();
     });
   });
 }
@@ -1070,6 +1142,7 @@ function attemptSave(){
   const noteEl = document.getElementById('noteInput');
   const amount = evalAmountExpr(amountEl.value);
   if(!(amount>0)){ if(!state.numpadOpen) amountEl.focus(); showToast('Wpisz poprawną kwotę'); return; }
+  if(amount>MAX_AMOUNT){ showToast('Maksymalna kwota to 10 000 000 zł'); return; }
 
   if(state.addMode==='income'){
     if(!state.selCatId){ showToast('Wybierz źródło przychodu'); return; }
