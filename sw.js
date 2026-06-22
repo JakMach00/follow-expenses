@@ -1,11 +1,11 @@
-// Service worker for "Wydatki" — caches the app shell (HTML + the Firebase
+// Service worker for "Wydatki" - caches the app shell (HTML + the Firebase
 // SDK module files) so the page itself loads with zero connectivity.
-// It deliberately does NOT touch Firebase/Google API network calls —
+// It deliberately does NOT touch Firebase/Google API network calls -
 // those are handled by Firestore's own offline queue (IndexedDB), and
 // intercepting them here would only get in the way.
 
 const CACHE_NAME = 'wydatki-shell-v1';
-const SHELL_FILES = ['./', './index.html', './manifest.json'];
+const SHELL_FILES = ['./', './index.html', './manifest.json', './style.css', './app.js', './firebase-init.js'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
