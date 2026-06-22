@@ -1,4 +1,5 @@
-const CACHE_NAME = 'wydatki-shell-v2';
+const VERSION = '__BUILD__';
+const CACHE_NAME = 'wydatki-shell-' + VERSION;
 const SHELL = [
   './',
   './index.html',
@@ -7,6 +8,7 @@ const SHELL = [
   './firebase-init.js',
   './manifest.json'
 ];
+const NET_TIMEOUT = 3500;
 
 self.addEventListener('install', (event)=>{
   event.waitUntil(
@@ -24,33 +26,43 @@ self.addEventListener('activate', (event)=>{
   );
 });
 
+self.addEventListener('message', (event)=>{
+  if(event.data === 'SKIP_WAITING') self.skipWaiting();
+});
+
+function fromNetwork(req){
+  return new Promise((resolve, reject)=>{
+    const timer = setTimeout(reject, NET_TIMEOUT);
+    fetch(req, {cache:'no-cache'}).then(
+      res=>{ clearTimeout(timer); resolve(res); },
+      ()=>{ clearTimeout(timer); reject(); }
+    );
+  });
+}
+
 self.addEventListener('fetch', (event)=>{
   const req = event.request;
   if(req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  // Tylko zasoby z naszej domeny. Firebase/gstatic obsługują się same.
   if(url.origin !== self.location.origin) return;
 
-  // Nawigacje (otwarcie aplikacji) - najpierw cache, fallback do index.
-  if(req.mode === 'navigate'){
-    event.respondWith(
-      caches.match('./index.html').then(cached=> cached || fetch(req))
-    );
-    return;
-  }
-
-  // Pozostałe zasoby shell - cache-first z dołożeniem do cache w tle.
-  event.respondWith(
-    caches.match(req).then(cached=>{
+  event.respondWith((async ()=>{
+    try{
+      const res = await fromNetwork(req);
+      if(res && res.status === 200 && res.type === 'basic'){
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then(c=> c.put(req, copy));
+      }
+      return res;
+    }catch(_){
+      const cached = await caches.match(req);
       if(cached) return cached;
-      return fetch(req).then(res=>{
-        if(res && res.status === 200 && res.type === 'basic'){
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then(c=> c.put(req, copy));
-        }
-        return res;
-      }).catch(()=> cached);
-    })
-  );
+      if(req.mode === 'navigate'){
+        const idx = await caches.match('./index.html');
+        if(idx) return idx;
+      }
+      return Response.error();
+    }
+  })());
 });

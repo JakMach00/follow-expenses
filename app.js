@@ -473,7 +473,7 @@ function renderMonth(){
     hero = `<div class="card budget-hero empty" data-act="gotobudget">
       <div class="bh-info">
         <div class="bh-big" style="font-size:17px;">Ustaw budżet miesięczny</div>
-        <div class="bh-sub">Zobaczysz pierścień postępu i ile jeszcze możesz wydać →</div>
+        <div class="bh-sub">Zobaczysz pierścień postępu i ile jeszcze możesz wydać</div>
       </div>
     </div>`;
   }
